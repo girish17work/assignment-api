@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: assignment-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: AIPIPE_TOKEN
+        sync: false
+      - key: AI_MODEL
+        value: gpt-4.1-mini
