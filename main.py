@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import urllib.request
+import urllib.error
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,10 +62,15 @@ def analyze_error_with_ai(code, output):
     request = urllib.request.Request(
         "https://aipipe.org/openai/v1/chat/completions",
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json", "Authorization": "Bearer " + token},
+        headers={"Content-Type": "application/json", "Authorization": "Bearer " + token,
+                 "User-Agent": "AssignmentAPI/1.0", "Accept": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=25) as response:
-        completion = json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=25) as response:
+            completion = json.load(response)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(2000).decode(errors="replace").replace(token, "[REDACTED]")
+        raise RuntimeError(f"AI Pipe HTTP {exc.code}: {detail}") from None
     analysis = ErrorAnalysis.model_validate_json(completion["choices"][0]["message"]["content"])
     evidence = [int(n) for n in re.findall(r'File "<student>", line (\d+)', output)]
     lines = sorted(set(analysis.error_lines))
