@@ -33,5 +33,21 @@ async def execute_isolated(code, timeout=8):
             return result
         finally:
             if process.returncode is None:
-                process.kill()
+                try:
+                    process.kill()
+                except PermissionError:
+                    # Render drops CAP_KILL. A trusted helper with the worker's
+                    # own UID can terminate it without granting new privileges.
+                    helper = await asyncio.create_subprocess_exec(
+                        sys.executable, "-I", "-c",
+                        "import os,sys;\ntry: os.kill(int(sys.argv[1]), 9)\nexcept ProcessLookupError: pass",
+                        str(process.pid), user=65534, group=65534, extra_groups=[],
+                        env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
+                        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await helper.wait()
+                    if helper.returncode:
+                        raise RuntimeError("Cannot stop the execution worker")
+                except ProcessLookupError:
+                    pass
                 await process.wait()
